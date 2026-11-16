@@ -147,6 +147,71 @@ func TestToken(t *testing.T) {
 	}
 }
 
+// TestTokenKept: the token a Client holds is read from it and given to
+// another, which asks Flair for none; one at its end, and one Flair
+// refuses, are asked for again, once. A Token formatted shows nothing of
+// itself.
+func TestTokenKept(t *testing.T) {
+	t.Parallel()
+
+	api, first := started(t)
+	ctx := t.Context()
+	credentials := flair.Credentials{ClientID: flairtest.ClientID, ClientSecret: flairtest.ClientSecret}
+
+	if token, held := first.Token(); held {
+		t.Fatalf("Token before any request = %+v", token)
+	}
+
+	if _, err := first.Structures(ctx); err != nil {
+		t.Fatalf("Structures: %v", err)
+	}
+
+	token, held := first.Token()
+	if left := time.Until(
+		token.Expires,
+	); !held || token.Access != "token-1" || left < 59*time.Minute ||
+		left > time.Hour {
+		t.Fatalf("Token after a request: held %t, %q, ending in %s", held, token.Access, left)
+	}
+
+	for _, verb := range []string{"%v", "%+v", "%#v", "%s", "%q"} {
+		if printed := fmt.Sprintf(verb, token) + fmt.Sprintf(verb, &token); strings.Contains(printed, "token-1") ||
+			strings.Contains(token.LogValue().String(), "token-1") {
+			t.Errorf("a Token under %s shows itself: %s", verb, printed)
+		}
+	}
+
+	restored := func(given flair.Token) *flair.Client {
+		return flair.New(credentials, flair.Options{BaseURL: api.URL, HTTP: api.Client(), Token: given})
+	}
+
+	asks := func(what string, client *flair.Client, tokens int) {
+		t.Helper()
+
+		for range 2 {
+			if _, err := client.Structures(ctx); err != nil {
+				t.Fatalf("Structures, %s: %v", what, err)
+			}
+		}
+
+		if len(api.Grants) != tokens {
+			t.Errorf("%s: %d tokens asked for so far, want %d", what, len(api.Grants), tokens)
+		}
+	}
+
+	asks("a Client given the token another holds", restored(token), 1)
+	asks("a Client given it with no end told", restored(flair.Token{Access: token.Access}), 1)
+	asks("a Client given a token at its end", restored(flair.Token{Access: token.Access, Expires: time.Now()}), 2)
+
+	// The token Flair gave last is the one that holds now.
+	late := restored(flair.Token{Access: "token-1", Expires: time.Now().Add(time.Hour)})
+	asks("a Client given a token Flair refuses", late, 3)
+
+	if token, held = late.Token(); !held || token.Access != "token-3" {
+		t.Errorf("Token after Flair refused the one given = %q, %t", token.Access, held)
+	}
+}
+
 // TestReading: the structures, rooms, vents and pucks, each with the
 // records it belongs to; a measure Flair gave none for is nil, a
 // relationship that names none is empty; a list in pages is read whole.

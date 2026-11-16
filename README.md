@@ -24,7 +24,9 @@ just flair heat-cool cool      # heat, cool, auto, or float for neither
 ```
 
 **Each run asks Flair for a token, and Flair gives about fifty a day.** The command keeps
-none between runs.
+none between runs. A program built on the library keeps its `Client`, and when it must
+outlive its process it keeps the token itself: `Client.Token` reads it, `Options.Token`
+gives it back. The library stores nothing.
 
 A vent holds the opening it is given in manual mode alone, and a room's target is acted
 on in auto mode alone; the command says so when the home's mode undoes what it was asked.

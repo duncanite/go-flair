@@ -60,8 +60,8 @@ None found, and no announcement of either.
 
 - `flair`: `New` takes the API client's id and secret. `Structures`, `Rooms`, `Vents`,
   `Pucks` and `Puck2s` read the homes and what is in them; `VentReading` what a vent
-  last measured. The writes: `SetVent`, `SetRoom`, `SetMode`, `SetHome`, `SetHeatCool`. The
-  standard library alone.
+  last measured. The writes: `SetVent`, `SetRoom`, `SetMode`, `SetHome`, `SetHeatCool`.
+  `Token` reads the token held, for a consumer to keep. The standard library alone.
 - `flair/flairtest`: the API for tests, the token route with it.
 - `cmd/flair`: the command, over `internal/cli`.
 
@@ -75,10 +75,15 @@ None found, and no announcement of either.
   halfway through a life shorter than two, by the credentials: the documentation shows no
   refresh token for this grant. A life told as a string is read; a token whose life is
   not told is kept until Flair answers 401 to it, as Flair's own client does, and then
-  asked for again, once. A program keeps its client. **The command cannot**: each run
-  asks for a token, of the fifty or so Flair gives a day. Keeping one between runs means
-  a secret in a file, which is not decided. Flair's client says a refresh "doesn't count
-  toward" that limit; whether this grant is given a refresh token is not known.
+  asked for again, once. Flair's client says a refresh "doesn't count toward" the limit;
+  whether this grant is given a refresh token is not known.
+- **Keeping a token beyond a process is the consumer's, never the library's.** Flair
+  gives fifty or so tokens a day, so a program that starts often cannot ask for one at
+  each start. The library writes nothing anywhere: `Client.Token` gives the token held
+  and its end, `Options.Token` takes one to start from, and where it is kept between the
+  two is the consumer's business, a plugin's state or a store of its own. A token given
+  is sent until its end or until Flair refuses it. **The command keeps none**: each run
+  asks for a token.
 - **A second-generation puck's room and home are followed.** The documentation writes
   them as links with no id beside them, where every other record carries the id: two
   requests more a puck. One whose home Flair does not tell is listed under any home.

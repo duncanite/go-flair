@@ -95,7 +95,35 @@ type Options struct {
 	// Scope is the scopes the token is asked for, separated by spaces;
 	// empty is DefaultScope.
 	Scope string
+	// Token is a token to start from, one an earlier Client's Token method
+	// gave; the zero value is none. It is sent until its end, or until
+	// Flair refuses it, and only then is another asked for.
+	Token Token
 }
+
+// Token is an access token Flair gave, and when it ends. It is a secret:
+// formatted or logged, it shows nothing of itself. Its fields are plain
+// and it has no marshaller, so that the program that keeps one between
+// runs can store it; and so a Token marshalled shows itself, which is what
+// a struct holding one does when it is logged as JSON. One kept in an
+// unexported field of another struct is out of reach of these methods
+// too, and fmt prints it as it is.
+//
+// A token carries no scope. One kept under some scopes and given to a
+// Client that names others is sent as it is until its end: the program
+// that changes its scopes drops the token it kept.
+type Token struct {
+	// Access is the token itself.
+	Access string
+	// Expires is when it ends; zero when Flair did not say.
+	Expires time.Time
+}
+
+// Format keeps the token out of a formatted value, whatever the verb.
+func (Token) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state, "flair token") }
+
+// LogValue keeps it out of a log record.
+func (Token) LogValue() slog.Value { return slog.StringValue("flair token") }
 
 // Client is one API client's access. Its methods may be called from
 // several goroutines. A Client formatted shows nothing of what it holds.
@@ -120,17 +148,35 @@ func (Client) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state, "fl
 type secrets struct {
 	credentials Credentials
 
-	mu      sync.Mutex
-	token   string
-	expires time.Time
+	mu sync.Mutex
+	// token is the token held, and leave when it is no longer sent: before
+	// its end, or never when its life was not told.
+	token Token
+	leave time.Time
+}
+
+// hold keeps a token, to be left a minute before its end, or halfway
+// through what is left of a life shorter than two.
+func (s *secrets) hold(token Token) {
+	s.token, s.leave = token, time.Time{}
+
+	if !token.Expires.IsZero() {
+		left := max(time.Until(token.Expires), 0)
+		s.leave = token.Expires.Add(-min(renewAhead, left/2))
+	}
 }
 
 // New is a client for the credentials. Nothing is sent until a method is
-// called: the first asks for a token, and a call made within a minute of
-// that token's end asks for another. Flair's own client says it creates
-// about fifty tokens a day and no more: a program keeps its Client.
+// called: the first asks for a token, unless Options gave one, and a call
+// made within a minute of that token's end asks for another.
+//
+// Flair gives about fifty tokens a day and no more. A program keeps its
+// Client; one that must not ask again at each start keeps the token too,
+// reading it with Token and giving it back in Options. Where it is kept
+// is that program's business: nothing here writes one anywhere.
 func New(credentials Credentials, opts Options) *Client {
 	state := &secrets{credentials: credentials}
+	state.hold(opts.Token)
 
 	client := &Client{
 		base:  strings.TrimSuffix(opts.BaseURL, "/"),
@@ -183,7 +229,18 @@ func (l *lifetime) UnmarshalJSON(raw []byte) error {
 // not at its end. One whose life was not told is used until Flair refuses
 // it, as Flair's own client does.
 func (s *secrets) usable() bool {
-	return s.token != "" && (s.expires.IsZero() || time.Now().Before(s.expires))
+	return s.token.Access != "" && (s.leave.IsZero() || time.Now().Before(s.leave))
+}
+
+// Token is the token the Client holds now, and whether it holds one: the
+// one it was given, or the last one Flair gave it. It may be at its end.
+func (c *Client) Token() (Token, bool) {
+	held := c.held()
+
+	held.mu.Lock()
+	defer held.mu.Unlock()
+
+	return held.token, held.token.Access != ""
 }
 
 // bearer is the token to send, and whether it was asked for just now. One
@@ -195,12 +252,12 @@ func (c *Client) bearer(ctx context.Context, spent string) (string, bool, error)
 	held.mu.Lock()
 	defer held.mu.Unlock()
 
-	if spent != "" && held.token == spent {
-		held.token = ""
+	if spent != "" && held.token.Access == spent {
+		held.hold(Token{})
 	}
 
 	if held.usable() {
-		return held.token, false, nil
+		return held.token.Access, false, nil
 	}
 
 	if held.credentials.ClientID == "" || held.credentials.ClientSecret == "" {
@@ -232,15 +289,14 @@ func (c *Client) bearer(ctx context.Context, spent string) (string, bool, error)
 		return "", false, fmt.Errorf("%w: the token route gave no token", ErrAnswer)
 	}
 
-	held.token, held.expires = token.AccessToken, time.Time{}
-
-	// The token is left a minute before its end, or halfway through a life
-	// shorter than two.
+	given := Token{Access: token.AccessToken}
 	if life := time.Duration(token.ExpiresIn) * time.Second; life > 0 {
-		held.expires = time.Now().Add(life - min(renewAhead, life/2))
+		given.Expires = time.Now().Add(life)
 	}
 
-	return held.token, true, nil
+	held.hold(given)
+
+	return given.Access, true, nil
 }
 
 // tokenPath is the token route; the documentation calls /oauth/token the
