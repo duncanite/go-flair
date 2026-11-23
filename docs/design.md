@@ -18,7 +18,7 @@ From the resources and fields of [Flair's API documentation](https://documenter.
   temperature and set a room's target, the newer Puck2 a resource of its own; a
   **gateway**, which is either one of the original Pucks on Wi-Fi or the Bridge, sold
   since 2024, on Ethernet or Wi-Fi
-  ([its announcement](https://www.prnewswire.com/news-releases/introducing-the-bridge-flairs-new-dedicated-plug-and-play-networking-gateway-302151074.html)).
+  ([its announcement](https://web.archive.org/web/20260311200932/https://www.prnewswire.com/news-releases/introducing-the-bridge-flairs-new-dedicated-plug-and-play-networking-gateway-302151074.html)).
 - Vents and pucks reach the gateway over a sub-GHz radio: the API reports a 915 MHz
   signal strength for each.
 - The logic is in the cloud. In the structure's "auto" mode Flair's servers move the
@@ -156,8 +156,9 @@ Home Assistant integration is [HA].
   client; the token limit.
 - [home-assistant-flair](https://github.com/RobertD502/home-assistant-flair): the cloud
   in use; the vent's three positions.
-- [Introducing the Bridge](https://www.prnewswire.com/news-releases/introducing-the-bridge-flairs-new-dedicated-plug-and-play-networking-gateway-302151074.html):
-  the gateway of 2024.
+- [Introducing the Bridge](https://web.archive.org/web/20260311200932/https://www.prnewswire.com/news-releases/introducing-the-bridge-flairs-new-dedicated-plug-and-play-networking-gateway-302151074.html):
+  the gateway of 2024, Flair's announcement of 2024-05-21 as the Wayback Machine kept
+  it: its publisher refuses a links check.
 - [Locally-Hosted-Flair-](https://github.com/jonnes86/Locally-Hosted-Flair-): the state
   of the radio's reverse engineering.
 - [flair-client](https://github.com/jahvon/flair-client): a Go client of the cloud API.
